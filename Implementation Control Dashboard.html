@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LEC SCADA/EMS — Implementation Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ─── THEME VARIABLES ──────────────────────────────────────────────────── */
+:root {
+  --bg:        #F0F4FA;
+  --surface:   #FFFFFF;
+  --surface2:  #F7F9FC;
+  --border:    #E8EDF5;
+  --border2:   #D1D9E8;
+  --text1:     #0F1C2E;
+  --text2:     #536380;
+  --text3:     #9BADC5;
+  --gold:      #C8960C;
+  --gold2:     #F5C842;
+  --green:     #00B96B;
+  --green-bg:  #E8FAF2;
+  --amber:     #F59E0B;
+  --amber-bg:  #FEF3C7;
+  --red:       #EF4444;
+  --red-bg:    #FEE2E2;
+  --blue:      #3B82F6;
+  --blue-bg:   #EFF6FF;
+  --shadow-sm: 0 2px 8px rgba(15,28,46,.06);
+  --shadow:    0 4px 20px rgba(15,28,46,.09);
+  --shadow-lg: 0 8px 32px rgba(15,28,46,.13);
+  --shadow-3d: 0 10px 40px rgba(15,28,46,.12), 0 2px 8px rgba(15,28,46,.06);
+  --r:         14px;
+  --r-sm:      10px;
+  --font:      'Outfit', sans-serif;
+  --mono:      'DM Mono', monospace;
+  --sidebar:   240px;
+}
+.dark {
+  --bg:        #0B1120;
+  --surface:   #131D30;
+  --border:    #1E2D47;
+  --border2:   #253650;
+  --text1:     #E8EFF8;
+  --text2:     #7A93B8;
+  --text3:     #3D5472;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.3);
+  --shadow:    0 4px 20px rgba(0,0,0,.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.5);
+  --shadow-3d: 0 10px 40px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.3);
+  --green-bg:  #0A2A1A;
+  --amber-bg:  #2A1E07;
+  --red-bg:    #2A0D0D;
+  --blue-bg:   #0D1A33;
+}
+
+/* ─── RESET ────────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text1);font-family:var(--font);transition:all .3s;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+button{font-family:var(--font);cursor:pointer;}
+
+/* ─── LAYOUT ───────────────────────────────────────────────────────────── */
+.shell{display:flex;height:100vh;overflow:hidden;}
+
+/* ─── SIDEBAR ──────────────────────────────────────────────────────────── */
+.sidebar{
+  width:var(--sidebar);min-width:var(--sidebar);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+  transition:all .3s;
+}
+/* Subtle gold gradient top */
+.sidebar::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#C8960C,#F5C842,#C8960C);
+}
+
+/* Logo zone */
+.logo-zone{
+  padding:22px 18px 18px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:11px;
+}
+.logo-circle{
+  width:42px;height:42px;border-radius:12px;
+  background:linear-gradient(135deg,#C8960C 0%,#F5C842 100%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 14px rgba(200,150,12,.35);
+  flex-shrink:0;
+}
+.logo-circle svg{width:24px;height:24px;}
+.logo-text{line-height:1.25;}
+.logo-text .org{font-size:13px;font-weight:800;color:var(--text1);letter-spacing:.01em;}
+.logo-text .dept{font-size:9px;font-weight:500;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;font-family:var(--mono);}
+
+/* Nav */
+.nav-group{padding:14px 10px 4px;}
+.nav-label{font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.14em;text-transform:uppercase;padding:0 8px;margin-bottom:4px;font-family:var(--mono);}
+.nav-btn{
+  width:100%;display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:var(--r-sm);
+  border:none;background:transparent;
+  color:var(--text2);font-size:13px;font-weight:500;
+  cursor:pointer;transition:all .18s;text-align:left;
+  margin-bottom:1px;
+}
+.nav-btn:hover{background:var(--bg);color:var(--text1);}
+.nav-btn.on{
+  background:linear-gradient(135deg,rgba(200,150,12,.12),rgba(245,200,66,.06));
+  color:var(--gold);font-weight:700;
+  box-shadow:inset 3px 0 0 var(--gold);
+}
+.nav-icon{font-size:16px;width:22px;text-align:center;}
+.nav-badge{
+  margin-left:auto;background:var(--red);color:#fff;
+  font-size:10px;font-weight:700;min-width:18px;height:18px;
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  padding:0 5px;
+}
+
+/* Profile card at bottom */
+.profile-area{margin-top:auto;padding:12px;}
+.profile-card{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:12px;padding:12px;
+  display:flex;align-items:center;gap:10px;
+  transition:all .2s;cursor:pointer;
+}
+.profile-card:hover{box-shadow:var(--shadow-sm);border-color:var(--border2);}
+.avatar{
+  width:36px;height:36px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#C8960C,#F5C842);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;color:#fff;
+  box-shadow:0 2px 8px rgba(200,150,12,.3);
+}
+.profile-info{flex:1;min-width:0;}
+.profile-info .name{font-size:12px;font-weight:700;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.profile-info .role{font-size:9.5px;color:var(--text2);font-family:var(--mono);}
+.online-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0;}
+
+/* ─── MAIN ─────────────────────────────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* Topbar */
+.topbar{
+  height:60px;min-height:60px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 24px;gap:14px;
+  box-shadow:var(--shadow-sm);
+}
+.page-hd{flex:1;}
+.page-hd h1{font-size:16px;font-weight:700;color:var(--text1);line-height:1;}
+.page-hd p{font-size:10px;color:var(--text2);margin-top:2px;font-family:var(--mono);}
+
+.topbar-actions{display:flex;align-items:center;gap:10px;}
+.live-pill{
+  display:flex;align-items:center;gap:6px;
+  background:var(--green-bg);border:1px solid rgba(0,185,107,.25);
+  padding:5px 12px;border-radius:20px;
+}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.6s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,185,107,.4);}50%{box-shadow:0 0 0 5px rgba(0,185,107,0);}}
+.live-pill span{font-size:10px;font-weight:700;color:var(--green);letter-spacing:.1em;font-family:var(--mono);}
+
+.clock-box{text-align:right;}
+.clock-box .time{font-size:17px;font-weight:700;color:var(--gold);font-family:var(--mono);letter-spacing:.03em;}
+.clock-box .date{font-size:9px;color:var(--text2);font-family:var(--mono);}
+
+.icon-btn{
+  width:36px;height:36px;border-radius:var(--r-sm);
+  background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;cursor:pointer;transition:all .2s;
+  position:relative;
+}
+.icon-btn:hover{border-color:var(--border2);box-shadow:var(--shadow-sm);}
+.notif-dot{
+  position:absolute;top:5px;right:5px;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--red);border:1.5px solid var(--surface);
+}
+
+/* ─── CONTENT ──────────────────────────────────────────────────────────── */
+.content{flex:1;overflow-y:auto;padding:22px 24px;display:flex;flex-direction:column;gap:18px;}
+
+/* ─── KPI STRIP ────────────────────────────────────────────────────────── */
+.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+.kpi{
+  background:linear-gradient(160deg,#FFFFFF 0%,#F4F6FA 100%);
+  border:1px solid #E2E8F2;
+  border-radius:var(--r);
+  padding:20px 22px;
+  position:relative;overflow:hidden;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 -1px 0 rgba(0,0,0,.04) inset,
+    0 6px 20px rgba(15,28,46,.07),
+    0 2px 6px rgba(15,28,46,.05);
+  transition:transform .22s cubic-bezier(.34,1.56,.64,1),box-shadow .22s ease;
+  cursor:default;
+}
+.kpi:hover{
+  transform:translateY(-4px) scale(1.015);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 -1px 0 rgba(0,0,0,.04) inset,
+    0 18px 40px rgba(15,28,46,.13),
+    0 6px 16px rgba(15,28,46,.08);
+  border-color:#D0D8E8;
+}
+.dark .kpi{
+  background:linear-gradient(160deg,#1A2540 0%,#131D30 100%);
+  border-color:#243050;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.04) inset,
+    0 -1px 0 rgba(0,0,0,.3) inset,
+    0 6px 20px rgba(0,0,0,.3),
+    0 2px 6px rgba(0,0,0,.2);
+}
+.dark .kpi:hover{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.06) inset,
+    0 18px 40px rgba(0,0,0,.45),
+    0 6px 16px rgba(0,0,0,.3);
+  border-color:#2E3E60;
+}
+/* thin colored top line only — accent stays but subtle */
+.kpi::before{
+  content:'';position:absolute;top:0;left:16px;right:16px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  border-radius:0 0 2px 2px;opacity:.6;
+}
+.kpi::after{content:none;}
+.kpi-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
+.kpi-icon{font-size:22px;opacity:.8;}
+.kpi-tag{
+  font-size:9px;font-weight:700;letter-spacing:.1em;
+  padding:3px 9px;border-radius:6px;
+  background:rgba(15,28,46,.06);color:var(--text2);
+  font-family:var(--mono);border:1px solid var(--border);
+}
+.dark .kpi-tag{background:rgba(255,255,255,.06);color:var(--text3);border-color:var(--border);}
+.kpi-val{font-size:38px;font-weight:800;color:var(--text1);line-height:1;font-family:var(--mono);}
+.kpi-label{font-size:11.5px;font-weight:600;color:var(--text2);margin-top:8px;letter-spacing:.02em;}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:3px;}
+
+/* ─── GRID ─────────────────────────────────────────────────────────────── */
+.grid-2{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.span2{grid-column:1/-1;}
+.card{
+  background:linear-gradient(160deg,#FFFFFF 0%,#F7F9FC 100%);
+  border:1px solid #E2E8F2;
+  border-radius:var(--r);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 6px 20px rgba(15,28,46,.07),
+    0 2px 6px rgba(15,28,46,.04);
+  overflow:hidden;
+  transition:all .25s ease;
+}
+.card:hover{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.9) inset,
+    0 12px 32px rgba(15,28,46,.1),
+    0 4px 10px rgba(15,28,46,.06);
+  border-color:#D4DCE8;
+}
+.dark .card{
+  background:linear-gradient(160deg,#1A2540 0%,#131D30 100%);
+  border-color:#1E2D47;
+  box-shadow:0 6px 20px rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.2);
+}
+.dark .card:hover{
+  box-shadow:0 12px 32px rgba(0,0,0,.4),0 4px 10px rgba(0,0,0,.25);
+  border-color:#253650;
+}
+.card-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--border);
+}
+.card-title{font-size:12px;font-weight:700;color:var(--text1);text-transform:uppercase;letter-spacing:.07em;}
+.chip{
+  font-size:9px;font-weight:700;letter-spacing:.08em;
+  padding:3px 9px;border-radius:20px;font-family:var(--mono);
+}
+.card-body{padding:16px 18px;}
+
+/* ─── STATUS PILLS ─────────────────────────────────────────────────────── */
+.pill{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;
+  white-space:nowrap;font-family:var(--mono);
+}
+.pill-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.pill.green{background:var(--green-bg);color:var(--green);}
+.pill.green .pill-dot{background:var(--green);}
+.pill.amber{background:var(--amber-bg);color:var(--amber);}
+.pill.amber .pill-dot{background:var(--amber);}
+.pill.red{background:var(--red-bg);color:var(--red);}
+.pill.red .pill-dot{background:var(--red);}
+.pill.blue{background:var(--blue-bg);color:var(--blue);}
+.pill.blue .pill-dot{background:var(--blue);}
+.pill.grey{background:var(--bg);color:var(--text3);}
+
+/* ─── SITE TABLE ───────────────────────────────────────────────────────── */
+.tbl{width:100%;border-collapse:collapse;}
+.tbl th{
+  font-size:9.5px;font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.1em;
+  padding:9px 14px;border-bottom:1px solid var(--border);
+  text-align:left;font-family:var(--mono);background:var(--bg);
+}
+.tbl td{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  font-size:12.5px;vertical-align:middle;
+}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tr:hover td{background:rgba(200,150,12,.04);}
+.site-nm{font-weight:700;color:var(--text1);}
+.site-sub{font-size:10px;color:var(--text2);font-family:var(--mono);}
+
+/* Progress bar */
+.mini-prog{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px;width:70px;}
+.mini-fill{height:100%;border-radius:3px;}
+
+/* WS dots */
+.ws-row{display:flex;gap:4px;}
+.ws-d{width:9px;height:9px;border-radius:50%;}
+
+/* ─── DONUT CHART ──────────────────────────────────────────────────────── */
+.donut-wrap{position:relative;width:130px;height:130px;margin:0 auto;}
+.donut-center{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;
+}
+.donut-num{font-size:26px;font-weight:800;color:var(--text1);font-family:var(--mono);line-height:1;}
+.donut-sub{font-size:10px;color:var(--text2);margin-top:2px;}
+
+/* ─── NCR CARDS ────────────────────────────────────────────────────────── */
+.ncr-item{
+  display:flex;gap:12px;padding:11px 18px;
+  border-bottom:1px solid var(--border);
+  align-items:flex-start;transition:background .15s;
+}
+.ncr-item:last-child{border-bottom:none;}
+.ncr-item:hover{background:rgba(200,150,12,.04);}
+.ncr-stripe{width:4px;border-radius:2px;align-self:stretch;flex-shrink:0;}
+.ncr-body{flex:1;min-width:0;}
+.ncr-id{font-size:10px;font-weight:700;color:var(--gold);font-family:var(--mono);}
+.ncr-desc{font-size:12px;color:var(--text1);margin-top:2px;line-height:1.4;}
+.ncr-meta{font-size:10px;color:var(--text2);margin-top:4px;font-family:var(--mono);}
+
+/* ─── ACTIVITY ─────────────────────────────────────────────────────────── */
+.act-row{
+  display:flex;gap:14px;padding:10px 18px;
+  border-bottom:1px solid var(--border);align-items:center;
+}
+.act-row:last-child{border-bottom:none;}
+.act-row:hover{background:rgba(200,150,12,.04);}
+.act-ring{flex-shrink:0;}
+.act-info{flex:1;min-width:0;}
+.act-site{font-size:12.5px;font-weight:700;color:var(--text1);}
+.act-name{font-size:11px;color:var(--text2);}
+.act-note{font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.act-right{text-align:right;flex-shrink:0;}
+.act-date{font-size:9.5px;color:var(--text3);font-family:var(--mono);}
+
+/* ─── SYSTEM HEALTH BAR ────────────────────────────────────────────────── */
+.health-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 18px;background:var(--bg);
+  border-bottom:1px solid var(--border);font-size:11px;
+}
+.h-item{display:flex;align-items:center;gap:5px;}
+.h-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.h-label{color:var(--text2);}
+.h-val{font-weight:700;color:var(--text1);}
+.h-sep{width:1px;height:16px;background:var(--border);margin:0 4px;}
+
+/* ─── PAGES ────────────────────────────────────────────────────────────── */
+.page{display:none;flex-direction:column;gap:18px;}
+.page.on{display:flex;}
+
+/* ─── LEGEND ───────────────────────────────────────────────────────────── */
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;align-items:center;}
+.leg-item{display:flex;align-items:center;gap:5px;color:var(--text2);}
+.leg-dot{width:9px;height:9px;border-radius:50%;}
+
+/* ─── WEEKLY ───────────────────────────────────────────────────────────── */
+.week-card{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:16px;margin-bottom:12px;
+}
+.week-card:last-child{margin-bottom:0;}
+.week-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0;}
+.wk-stat{background:var(--surface);border-radius:8px;padding:10px;text-align:center;border:1px solid var(--border);}
+.wk-num{font-size:22px;font-weight:800;font-family:var(--mono);line-height:1;}
+.wk-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:3px;}
+.week-note{font-size:11.5px;color:var(--text2);line-height:1.6;background:var(--surface);border-radius:8px;padding:10px 12px;border:1px solid var(--border);}
+
+/* ─── CHART ────────────────────────────────────────────────────────────── */
+.chart-zone{padding:14px 16px 16px;height:190px;position:relative;}
+
+/* ─── ANIMATIONS ───────────────────────────────────────────────────────── */
+@keyframes slideUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.kpi{animation:slideUp .4s ease both;}
+.kpi:nth-child(1){animation-delay:.04s;}
+.kpi:nth-child(2){animation-delay:.08s;}
+.kpi:nth-child(3){animation-delay:.12s;}
+.kpi:nth-child(4){animation-delay:.16s;}
+.kpi:nth-child(5){animation-delay:.20s;}
+.card{animation:slideUp .35s ease .15s both;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ─── SIDEBAR ────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="logo-zone">
+    <div class="logo-circle" style="background:white;padding:3px;">
+      <img src="data:image/png;base64,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" style="width:36px;height:36px;object-fit:contain;border-radius:9px;" alt="LEC Logo"/>
+    </div>
+    <div class="logo-text">
+      <div class="org">LEC · SCADA/EMS</div>
+      <div class="dept">Implementation Control</div>
+    </div>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-label">Dashboard</div>
+    <button class="nav-btn on" onclick="showPage('overview',this)"><span class="nav-icon">⊡</span>Overview</button>
+    <button class="nav-btn" onclick="showPage('sites',this)"><span class="nav-icon">◎</span>Site Status</button>
+    <button class="nav-btn" onclick="showPage('ncr',this)"><span class="nav-icon">⚠</span>NCR Log<span class="nav-badge">7</span></button>
+    <button class="nav-btn" onclick="showPage('activity',this)"><span class="nav-icon">◈</span>Activity</button>
+    <button class="nav-btn" onclick="showPage('weekly',this)"><span class="nav-icon">▦</span>Weekly Report</button>
+  </div>
+  <div class="nav-group">
+    <div class="nav-label">System</div>
+    <button class="nav-btn" onclick="showPage('ied',this)"><span class="nav-icon">⬡</span>IED Status</button>
+    <button class="nav-btn"><span class="nav-icon">⚙</span>Settings</button>
+  </div>
+
+  <div class="profile-area">
+    <div class="profile-card">
+      <div class="avatar">AJ</div>
+      <div class="profile-info">
+        <div class="name">Admin User</div>
+        <div class="role">SCADA ENGINEER · LEC</div>
+      </div>
+      <div class="online-dot"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ─── MAIN ──────────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="page-hd">
+      <h1>Implementation Control Dashboard</h1>
+      <p>LIBERIA ELECTRICITY CORPORATION · SCADA/EMS DEPARTMENT · APRIL 2026</p>
+    </div>
+    <div class="topbar-actions">
+      <div class="live-pill"><div class="pulse"></div><span>LIVE</span></div>
+      <div class="clock-box">
+        <div class="time" id="clk"></div>
+        <div class="date" id="clkd"></div>
+      </div>
+      <div class="icon-btn" title="Notifications">🔔<div class="notif-dot"></div></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="theme-label-light" style="font-size:10px;font-weight:600;color:var(--text2);font-family:var(--mono);">LIGHT</span>
+        <div onclick="toggleTheme()" id="toggle-track" style="
+          width:44px;height:24px;border-radius:12px;
+          background:var(--border2);
+          position:relative;cursor:pointer;
+          transition:background .3s;
+          border:1px solid var(--border2);
+          box-shadow:inset 0 1px 3px rgba(0,0,0,.15);
+        ">
+          <div id="toggle-thumb" style="
+            width:18px;height:18px;border-radius:50%;
+            background:white;
+            position:absolute;top:2px;left:3px;
+            transition:transform .3s,background .3s;
+            box-shadow:0 2px 6px rgba(0,0,0,.2);
+            display:flex;align-items:center;justify-content:center;
+            font-size:10px;
+          "></div>
+        </div>
+        <span id="theme-label-dark" style="font-size:10px;font-weight:600;color:var(--text2);font-family:var(--mono);">DARK</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- ══ OVERVIEW PAGE ══════════════════════════════════════════════════ -->
+    <div class="page on" id="page-overview">
+
+      <!-- KPI Strip -->
+      <div class="kpi-strip">
+        <div class="kpi" style="--accent:var(--gold);--accent-bg:rgba(200,150,12,.1);">
+          <div class="kpi-top"><span class="kpi-icon"></span><span class="kpi-tag">TOTAL</span></div>
+          <div class="kpi-val">16</div>
+          <div class="kpi-label">Sites in Registry</div>
+          <div class="kpi-sub">Monrovia &amp; Margibi</div>
+        </div>
+        <div class="kpi" style="--accent:var(--green);--accent-bg:var(--green-bg);">
+          <div class="kpi-top"><span class="kpi-icon">✅</span><span class="kpi-tag">LIVE</span></div>
+          <div class="kpi-val">2</div>
+          <div class="kpi-label">Commissioned</div>
+          <div class="kpi-sub">Fully operational</div>
+        </div>
+        <div class="kpi" style="--accent:var(--amber);--accent-bg:var(--amber-bg);">
+          <div class="kpi-top"><span class="kpi-icon"></span><span class="kpi-tag">ACTIVE</span></div>
+          <div class="kpi-val">7</div>
+          <div class="kpi-label">In Progress</div>
+          <div class="kpi-sub">Active commissioning</div>
+        </div>
+        <div class="kpi" style="--accent:var(--red);--accent-bg:var(--red-bg);">
+          <div class="kpi-top"><span class="kpi-icon"></span><span class="kpi-tag">OPEN</span></div>
+          <div class="kpi-val">7</div>
+          <div class="kpi-label">Open NCRs</div>
+          <div class="kpi-sub">4 High · 3 Medium</div>
+        </div>
+        <div class="kpi" style="--accent:var(--blue);--accent-bg:var(--blue-bg);">
+          <div class="kpi-top"><span class="kpi-icon"></span><span class="kpi-tag">AVG</span></div>
+          <div class="kpi-val">54%</div>
+          <div class="kpi-label">Avg Completion</div>
+          <div class="kpi-sub">Across all sites</div>
+        </div>
+      </div>
+
+      <!-- Health bar -->
+      <div class="card" style="padding:0;">
+        <div class="health-bar">
+          <div class="h-item"><div class="h-dot" style="background:var(--green)"></div><span class="h-label">System:</span><span class="h-val">Operational</span></div>
+          <div class="h-sep"></div>
+          <div class="h-item"><div class="h-dot" style="background:var(--amber)"></div><span class="h-label">RTU Config:</span><span class="h-val">Pending</span></div>
+          <div class="h-sep"></div>
+          <div class="h-item"><span class="h-label">Active Sites:</span><span class="h-val">9 / 16</span></div>
+          <div class="h-sep"></div>
+          <div class="h-item"><span class="h-label">Last Sync:</span><span class="h-val">07 Apr 2026 · 15:29</span></div>
+          <div class="h-sep"></div>
+          <div class="h-item"><span class="h-label">Checks Passed:</span><span class="h-val" style="color:var(--green)">40</span></div>
+          <div class="h-sep"></div>
+          <div class="legend">
+            <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div>Passed / Completed</div>
+            <div class="leg-item"><div class="leg-dot" style="background:var(--amber)"></div>In Progress</div>
+            <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>Not Started / Open</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div class="grid-2">
+
+        <!-- Site Readiness Table -->
+        <div class="card">
+          <div class="card-hd">
+            <span class="card-title">Site Readiness Tracker</span>
+            <span class="chip" style="background:rgba(200,150,12,.1);color:var(--gold);">10 SITES · 7 CHECKS</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="tbl" id="site-tbl">
+              <thead>
+                <tr>
+                  <th>Site</th>
+                  <th>Power</th><th>I/O</th><th>RTU</th>
+                  <th>Telecomm</th><th>SCADA</th><th>Infra</th><th>Cyber</th>
+                  <th>%</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="site-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Right column -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <!-- Donut overview -->
+          <div class="card">
+            <div class="card-hd">
+              <span class="card-title">Completion Overview</span>
+              <span class="chip" style="background:var(--blue-bg);color:var(--blue);">LIVE</span>
+            </div>
+            <div class="card-body" style="display:flex;align-items:center;gap:20px;">
+              <div class="donut-wrap">
+                <canvas id="donutChart" width="130" height="130"></canvas>
+                <div class="donut-center">
+                  <div class="donut-num">16</div>
+                  <div class="donut-sub">Total Sites</div>
+                </div>
+              </div>
+              <div style="flex:1;">
+                <div id="donut-legend" style="display:flex;flex-direction:column;gap:8px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- NCR Summary -->
+          <div class="card" style="flex:1;">
+            <div class="card-hd">
+              <span class="card-title">Open NCRs</span>
+              <span class="chip" style="background:var(--red-bg);color:var(--red);">7 OPEN</span>
+            </div>
+            <div id="ncr-short"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bar Chart full width -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Site Completion — Bar Overview</span>
+          <span class="chip" style="background:var(--green-bg);color:var(--green);">REALTIME</span>
+        </div>
+        <div class="chart-zone"><canvas id="barChart"></canvas></div>
+      </div>
+
+      <!-- Activity bottom -->
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Recent Commissioning Activity</span>
+          <span class="chip" style="background:var(--blue-bg);color:var(--blue);">6 ENTRIES</span>
+        </div>
+        <div id="act-short"></div>
+      </div>
+
+    </div><!-- /overview -->
+
+    <!-- ══ SITES PAGE ═════════════════════════════════════════════════════ -->
+    <div class="page" id="page-sites">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">All Sites — Full Status</span>
+          <span class="chip" style="background:rgba(200,150,12,.1);color:var(--gold);">16 SITES</span>
+        </div>
+        <div style="overflow-x:auto;"><table class="tbl"><thead><tr>
+          <th>Site</th><th>Region</th><th>Voltage</th><th>Type</th>
+          <th>Power</th><th>I/O</th><th>RTU</th><th>Telecomm</th><th>SCADA</th><th>Infra</th><th>Cyber</th>
+          <th>Overall %</th><th>Status</th><th>Engineer</th><th>Last Visit</th>
+        </tr></thead><tbody id="sites-full-tbody"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ══ NCR PAGE ═══════════════════════════════════════════════════════ -->
+    <div class="page" id="page-ncr">
+      <div class="kpi-strip" style="grid-template-columns:repeat(5,1fr);">
+        <div class="kpi" style="--accent:var(--text2);--accent-bg:var(--bg);">
+          <div class="kpi-top"><span class="kpi-icon">📋</span></div>
+          <div class="kpi-val" style="font-size:30px;">8</div><div class="kpi-label">Total NCRs</div>
+        </div>
+        <div class="kpi" style="--accent:var(--red);--accent-bg:var(--red-bg);">
+          <div class="kpi-top"><span class="kpi-icon">🔴</span></div>
+          <div class="kpi-val" style="font-size:30px;">7</div><div class="kpi-label">Open</div>
+        </div>
+        <div class="kpi" style="--accent:#7C0000;--accent-bg:var(--red-bg);">
+          <div class="kpi-top"><span class="kpi-icon">❗</span></div>
+          <div class="kpi-val" style="font-size:30px;">4</div><div class="kpi-label">High Severity</div>
+        </div>
+        <div class="kpi" style="--accent:var(--amber);--accent-bg:var(--amber-bg);">
+          <div class="kpi-top"><span class="kpi-icon">🟡</span></div>
+          <div class="kpi-val" style="font-size:30px;">3</div><div class="kpi-label">Medium</div>
+        </div>
+        <div class="kpi" style="--accent:var(--green);--accent-bg:var(--green-bg);">
+          <div class="kpi-top"><span class="kpi-icon">✅</span></div>
+          <div class="kpi-val" style="font-size:30px;">1</div><div class="kpi-label">Resolved</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;" id="ncr-cards"></div>
+    </div>
+
+    <!-- ══ ACTIVITY PAGE ══════════════════════════════════════════════════ -->
+    <div class="page" id="page-activity">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Commissioning Activity Log</span>
+          <span class="chip" style="background:var(--blue-bg);color:var(--blue);">6 ENTRIES · APRIL 2026</span>
+        </div>
+        <div id="act-full"></div>
+      </div>
+    </div>
+
+    <!-- ══ WEEKLY PAGE ════════════════════════════════════════════════════ -->
+    <div class="page" id="page-weekly">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">Weekly Implementation Summary</span>
+        </div>
+        <div class="card-body" id="weekly-body"></div>
+      </div>
+    </div>
+
+    <!-- ══ IED PAGE ═══════════════════════════════════════════════════════ -->
+    <div class="page" id="page-ied">
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-title">IED Equipment Status — Substations</span>
+          <span class="chip" style="background:var(--green-bg);color:var(--green);">9 SUBSTATIONS</span>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;" id="ied-grid"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────
+const SITES=[
+  {n:"Stockton Creek",  r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.29, eng:"EIT Team",   last:"03 Mar 2026", ws:[1,1,0,0,0,0,0], ncrs:0},
+  {n:"Bushrod",         r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.14, eng:"EIT Team",   last:"06 Apr 2026", ws:[1,0,0,0,0,0,0], ncrs:1},
+  {n:"Gardnersville",   r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.14, eng:"EIT Team",   last:"06 Apr 2026", ws:[1,2,0,0,0,0,0], ncrs:0},
+  {n:"Paynesville",     r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.86, eng:"EIT Team",   last:"07 Apr 2026", ws:[1,1,0,1,1,1,1], ncrs:2},
+  {n:"Mt. Coffee Sub",  r:"Monrovia", v:"66/22KV", t:"Hydro", s:"Commissioned", pct:.86, eng:"SCADA Team", last:"N/A",         ws:[1,1,0,1,1,1,1], ncrs:0},
+  {n:"Mt. Coffee Plant",r:"Monrovia", v:"66/22KV", t:"Hydro", s:"Commissioned", pct:.86, eng:"SCADA Team", last:"N/A",         ws:[1,1,0,1,1,1,1], ncrs:0},
+  {n:"Kru Town",        r:"Monrovia", v:"66/22KV", t:"Grid",  s:"Completed",    pct:1.0, eng:"EIT Team",   last:"06 Apr 2026", ws:[1,1,0,1,1,1,1], ncrs:0},
+  {n:"Capital",         r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.86, eng:"EIT Team",   last:"06 Apr 2026", ws:[1,1,0,1,1,1,1], ncrs:1},
+  {n:"Congo Town",      r:"Monrovia", v:"66/22KV", t:"Grid",  s:"In Progress",  pct:.86, eng:"EIT Team",   last:"07 Apr 2026", ws:[1,1,0,1,1,1,1], ncrs:1},
+  {n:"RIA",             r:"Margibi",  v:"66/33KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+  {n:"Schefflin",       r:"Monrovia", v:"66/22KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+  {n:"Kakata",          r:"Margibi",  v:"66/33KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+  {n:"Virgina",         r:"Monrovia", v:"66/22KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+  {n:"Klay",            r:"Bomi",     v:"66/33KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+  {n:"Paynesville Sub", r:"Monrovia", v:"66/22KV", t:"Grid",  s:"Not Started",  pct:0,   eng:"TBD",        last:"N/A",         ws:[0,0,0,0,0,0,0], ncrs:0},
+];
+
+const NCRS=[
+  {id:"NC-003",date:"03 Mar 2026",site:"Stockton Creek",layer:"RTU Config",desc:"Cannot identify CT. Incorrect As-Built drawing.",sev:"Critical",owner:"Moses Flomo",target:"08 Mar 2026",status:"Resolved"},
+  {id:"NC-004",date:"06 Apr 2026",site:"Bushrod",layer:"Commissioning",desc:"Industrial AC non-functional in battery room.",sev:"High",owner:"EIT Team",target:"15 Apr 2026",status:"Open"},
+  {id:"NC-005",date:"06 Apr 2026",site:"Capital",layer:"Hardware Config",desc:"Siemens config incomplete. BCU panel not procured.",sev:"High",owner:"Procurement",target:"30 Apr 2026",status:"Open"},
+  {id:"NC-006",date:"07 Apr 2026",site:"Paynesville",layer:"Infrastructure",desc:"No air conditioning in battery room.",sev:"High",owner:"Facilities",target:"30 Apr 2026",status:"Open"},
+  {id:"NC-007",date:"07 Apr 2026",site:"Congo Town",layer:"Safety",desc:"Battery rack in proximity to fire extinguisher.",sev:"Medium",owner:"Safety Team",target:"20 Apr 2026",status:"Open"},
+  {id:"NC-008",date:"06 Apr 2026",site:"Kru Town",layer:"Hardware Config",desc:"Siemens config incomplete. BCU panel not procured.",sev:"High",owner:"Procurement",target:"30 Apr 2026",status:"Open"},
+  {id:"NC-009",date:"07 Apr 2026",site:"Paynesville",layer:"Infrastructure",desc:"No sunlight reflective covering on windows.",sev:"Medium",owner:"Facilities",target:"30 Apr 2026",status:"Open"},
+  {id:"NC-010",date:"06 Apr 2026",site:"Bushrod",layer:"Commissioning",desc:"FOT and PIX systems not commissioned.",sev:"Medium",owner:"EIT Team",target:"30 Apr 2026",status:"Open"},
+];
+
+const ACTS=[
+  {date:"06 Mar",site:"Bushrod",act:"I/O Modules Installation",pct:78,note:"Scaling mismatch on IO Channel FF",owner:"TBD",s:"In Progress"},
+  {date:"06 Apr",site:"Bushrod",act:"48VDC Panel Commissioning",pct:100,note:"FOT/PIX not within commissioning scope",owner:"EIT Team",s:"Completed"},
+  {date:"06 Apr",site:"Kru Town",act:"48VDC Panel Commissioning",pct:100,note:"AC under maintenance at time of visit",owner:"EIT Team",s:"Completed"},
+  {date:"06 Apr",site:"Capital",act:"48VDC Panel Commissioning",pct:100,note:"Siemens hardware configuration pending",owner:"EIT Team",s:"In Progress"},
+  {date:"07 Apr",site:"Paynesville",act:"48VDC Panel Commissioning",pct:100,note:"No AC in battery room. FOT/PIX not in scope",owner:"EIT Team",s:"In Progress"},
+  {date:"07 Apr",site:"Congo Town",act:"48VDC Panel + Rack Adjustment",pct:100,note:"Rack close to fire extinguisher — review required",owner:"EIT Team",s:"In Progress"},
+];
+
+const WEEKS=[
+  {w:1,p:"03 Mar to 06 Mar 2026",sites:3,done:2,ncrR:1,ncrRes:1,pct:12,note:"Stockton Creek CT issue resolved. Bushrod I/O installation commenced."},
+  {w:2,p:"06 Apr to 08 Apr 2026",sites:5,done:6,ncrR:8,ncrRes:1,pct:35,note:"48VDC panels commissioned at 5 sites. 8 NCRs raised. BCU panel procurement required at 3 sites."},
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const P=v=>v>=.85?"green":v>.1?"amber":v>0?"red":"grey";
+const pillHtml=(s)=>{
+  const m={Passed:"green",Completed:"green",Commissioned:"green",Resolved:"green","In Progress":"amber","Not Started":"red",Open:"red",Pending:"amber",Failed:"red","N/A":"grey"};
+  const c=m[s]||"grey";
+  return`<span class="pill ${c}"><span class="pill-dot"></span>${s}</span>`;
+};
+const wsDotHtml=(v)=>{
+  const c=v===1?"var(--green)":v===2?"var(--amber)":"var(--border2)";
+  return`<div class="ws-d" style="background:${c}"></div>`;
+};
+const sevColor=(s)=>({Critical:"#7C0000",High:"var(--red)",Medium:"var(--amber)",Low:"var(--green)"}[s]||"var(--text2)");
+const pctColor=(p)=>p>=.85?"var(--green)":p>.1?"var(--amber)":p>0?"var(--red)":"var(--text3)";
+function miniRing(pct,sz){
+  const r=(sz-4)/2,c=2*Math.PI*r,col=pctColor(pct);
+  return`<svg width="${sz}" height="${sz}" style="transform:rotate(-90deg);flex-shrink:0">
+    <circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="3.5"/>
+    <circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="${col}" stroke-width="3.5"
+      stroke-dasharray="${c*pct} ${c}" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// ─── BUILD SITE TABLE (overview) ──────────────────────────────────────────
+function buildSiteTable(){
+  document.getElementById("site-tbody").innerHTML=SITES.slice(0,10).map(s=>`
+    <tr>
+      <td><div class="site-nm">${s.n}</div><div class="site-sub">${s.r}</div></td>
+      ${s.ws.map(v=>`<td>${pillHtml(v===1?"Passed":v===2?"In Progress":"Not Started")}</td>`).join("")}
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${miniRing(s.pct,26)}
+          <span style="font-size:11px;font-weight:700;color:${pctColor(s.pct)};font-family:var(--mono)">${Math.round(s.pct*100)}%</span>
+        </div>
+      </td>
+      <td>${pillHtml(s.s)}</td>
+    </tr>`).join("");
+}
+
+// ─── FULL SITES TABLE ─────────────────────────────────────────────────────
+function buildSitesFull(){
+  document.getElementById("sites-full-tbody").innerHTML=SITES.map(s=>`
+    <tr>
+      <td><div class="site-nm">${s.n}</div></td>
+      <td class="site-sub">${s.r}</td>
+      <td class="site-sub">${s.v}</td>
+      <td class="site-sub">${s.t}</td>
+      ${s.ws.map(v=>`<td>${pillHtml(v===1?"Passed":v===2?"In Progress":"Not Started")}</td>`).join("")}
+      <td><div style="display:flex;align-items:center;gap:6px;">${miniRing(s.pct,24)}<span style="font-size:11px;font-weight:700;color:${pctColor(s.pct)};font-family:var(--mono)">${Math.round(s.pct*100)}%</span></div></td>
+      <td>${pillHtml(s.s)}</td>
+      <td class="site-sub">${s.eng}</td>
+      <td class="site-sub">${s.last}</td>
+    </tr>`).join("");
+}
+
+// ─── DONUT ────────────────────────────────────────────────────────────────
+let donut;
+function buildDonut(){
+  const comm=SITES.filter(s=>["Commissioned","Completed"].includes(s.s)).length;
+  const inp=SITES.filter(s=>s.s==="In Progress").length;
+  const ns=SITES.filter(s=>s.s==="Not Started").length;
+  const ctx=document.getElementById("donutChart").getContext("2d");
+  if(donut)donut.destroy();
+  donut=new Chart(ctx,{
+    type:"doughnut",
+    data:{labels:["Commissioned","In Progress","Not Started"],
+      datasets:[{data:[comm,inp,ns],backgroundColor:["#00B96B","#F59E0B","#EF4444"],
+        borderWidth:2,borderColor:getComputedStyle(document.body).getPropertyValue("--surface")||"#fff",hoverOffset:4}]},
+    options:{responsive:false,cutout:"72%",plugins:{legend:{display:false},tooltip:{backgroundColor:"#fff",titleColor:"#0F1C2E",bodyColor:"#536380",borderColor:"#E8EDF5",borderWidth:1,padding:10}}}
+  });
+  document.getElementById("donut-legend").innerHTML=[
+    ["Commissioned",comm,"var(--green)"],
+    ["In Progress",inp,"var(--amber)"],
+    ["Not Started",ns,"var(--red)"],
+  ].map(([l,v,c])=>`<div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:10px;height:10px;border-radius:3px;background:${c};flex-shrink:0;"></div>
+    <span style="font-size:11px;color:var(--text2);flex:1;">${l}</span>
+    <span style="font-size:13px;font-weight:800;color:${c};font-family:var(--mono);">${v}</span>
+  </div>`).join("");
+}
+
+// ─── BAR CHART ───────────────────────────────────────────────────────────
+let bar;
+function buildBar(){
+  const active=SITES.filter(s=>s.pct>0||s.s!=="Not Started");
+  const isDark=document.documentElement.classList.contains("dark");
+  const gridC=isDark?"rgba(255,255,255,.05)":"rgba(15,28,46,.05)";
+  const textC=isDark?"#7A93B8":"#9BADC5";
+  const ctx=document.getElementById("barChart").getContext("2d");
+  if(bar)bar.destroy();
+  bar=new Chart(ctx,{
+    type:"bar",
+    data:{
+      labels:active.map(s=>s.n.split(" ")[0]),
+      datasets:[{label:"Completion %",
+        data:active.map(s=>Math.round(s.pct*100)),
+        backgroundColor:active.map(s=>s.pct>=.85?"rgba(0,185,107,.8)":s.pct>.1?"rgba(245,158,11,.8)":"rgba(239,68,68,.8)"),
+        borderColor:active.map(s=>s.pct>=.85?"#00B96B":s.pct>.1?"#F59E0B":"#EF4444"),
+        borderWidth:1.5,borderRadius:6,borderSkipped:false}]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:isDark?"#131D30":"#fff",titleColor:isDark?"#E8EFF8":"#0F1C2E",bodyColor:isDark?"#7A93B8":"#536380",borderColor:isDark?"#1E2D47":"#E8EDF5",borderWidth:1,padding:10}},
+      scales:{x:{grid:{display:false},ticks:{color:textC,font:{size:10}}},
+              y:{grid:{color:gridC},ticks:{color:textC,font:{size:10},callback:v=>v+"%"},min:0,max:100}}
+    }
+  });
+}
+
+// ─── NCR LIST ────────────────────────────────────────────────────────────
+function ncrHtml(n,compact=true){
+  const sc=sevColor(n.sev);
+  const done=n.status==="Resolved";
+  return`<div class="ncr-item">
+    <div class="ncr-stripe" style="background:${done?"var(--green)":sc}"></div>
+    <div class="ncr-body">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span class="ncr-id">${n.id}</span>
+        <span style="font-size:9px;padding:2px 7px;border-radius:4px;font-weight:700;background:${done?"var(--green-bg)":n.sev==="High"?"var(--red-bg)":"var(--amber-bg)"};color:${done?"var(--green)":sc};font-family:var(--mono);">${n.sev}</span>
+        ${pillHtml(n.status)}
+      </div>
+      <div class="ncr-desc">${n.desc}</div>
+      <div class="ncr-meta">${n.site} · ${n.owner} · Due: ${n.target}</div>
+    </div>
+  </div>`;
+}
+function buildNCRs(){
+  document.getElementById("ncr-short").innerHTML=NCRS.filter(n=>n.status==="Open").slice(0,4).map(n=>ncrHtml(n)).join("");
+  document.getElementById("ncr-cards").innerHTML=NCRS.map(n=>`
+    <div class="card" style="border-left:4px solid ${n.status==="Resolved"?"var(--green)":sevColor(n.sev)};">
+      <div style="padding:14px 16px;">${ncrHtml(n)}</div>
+    </div>`).join("");
+}
+
+// ─── ACTIVITY ────────────────────────────────────────────────────────────
+function actHtml(a){
+  const sc=a.s==="Completed"?"var(--green)":a.s==="In Progress"?"var(--amber)":"var(--red)";
+  return`<div class="act-row">
+    ${miniRing(a.pct/100,32)}
+    <div class="act-info">
+      <div class="act-site">${a.site}</div>
+      <div class="act-name">${a.act}</div>
+      ${a.note?`<div class="act-note">Note: ${a.note}</div>`:""}
+    </div>
+    <div class="act-right">
+      <div class="act-date">${a.date}</div>
+      <div style="font-size:10px;font-weight:700;color:${sc};margin-top:3px;">${a.s}</div>
+    </div>
+  </div>`;
+}
+function buildActivity(){
+  document.getElementById("act-short").innerHTML=ACTS.map(actHtml).join("");
+  document.getElementById("act-full").innerHTML=ACTS.map(a=>`
+    <div class="act-row" style="border-left:4px solid ${a.s==="Completed"?"var(--green)":a.s==="In Progress"?"var(--amber)":"var(--red)"};">
+      ${miniRing(a.pct/100,36)}
+      <div class="act-info" style="flex:1;">
+        <div class="act-site">${a.site}</div>
+        <div class="act-name">${a.act}</div>
+        ${a.note?`<div class="act-note">Note: ${a.note}</div>`:""}
+        <div class="act-note" style="margin-top:2px">Owner: ${a.owner}</div>
+      </div>
+      <div class="act-right">
+        <div class="act-date">${a.date} Apr 2026</div>
+        <div style="font-size:18px;font-weight:800;color:${pctColor(a.pct/100)};font-family:var(--mono);margin-top:4px">${a.pct}%</div>
+        <div style="font-size:10px;font-weight:700;color:${a.s==="Completed"?"var(--green)":a.s==="In Progress"?"var(--amber)":"var(--red)"};">${a.s}</div>
+      </div>
+    </div>`).join("");
+}
+
+// ─── WEEKLY ──────────────────────────────────────────────────────────────
+function buildWeekly(){
+  document.getElementById("weekly-body").innerHTML=WEEKS.map(w=>`
+    <div class="week-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--gold);font-family:var(--mono);">WEEK ${w.w}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px;">${w.p}</div>
+        </div>
+        <div style="font-size:28px;font-weight:800;color:${pctColor(w.pct/100)};font-family:var(--mono);">${w.pct}%</div>
+      </div>
+      <div class="week-grid">
+        ${[["Sites Active",w.sites,"var(--gold)"],["Activities Done",w.done,"var(--green)"],["NCRs Raised",w.ncrR,"var(--red)"],["NCRs Resolved",w.ncrRes,"var(--green)"]].map(([l,v,c])=>`
+          <div class="wk-stat"><div class="wk-num" style="color:${c}">${v}</div><div class="wk-lbl">${l}</div></div>`).join("")}
+      </div>
+      <div class="week-note">${w.note}</div>
+    </div>`).join("")+`<p style="font-size:10px;color:var(--text3);text-align:center;padding:8px 0;">Note: This dashboard will be integrated with a live monitoring interface as the SCADA implementation progresses.</p>`;
+}
+
+// ─── IED ─────────────────────────────────────────────────────────────────
+const IED_SUBS=[
+  {n:"Mount Coffee Sub",cp:12,rp:12,fault:"1 (Multifunction Meter)"},
+  {n:"Paynesville",cp:11,rp:7,fault:"TC-1 A Phase Unhealthy"},
+  {n:"Gardnersville",cp:6,rp:6,fault:"None"},
+  {n:"Stockton Creek",cp:9,rp:10,fault:"None"},
+  {n:"RIA",cp:5,rp:5,fault:"None"},
+  {n:"Kru Town",cp:3,rp:3,fault:"None"},
+  {n:"Schefflin",cp:5,rp:5,fault:"None"},
+  {n:"Virgina",cp:3,rp:3,fault:"None"},
+  {n:"Bushrod",cp:6,rp:6,fault:"None"},
+];
+function buildIED(){
+  document.getElementById("ied-grid").innerHTML=IED_SUBS.map(s=>`
+    <div class="card" style="border-left:4px solid ${s.fault==="None"?"var(--green)":"var(--amber)"};">
+      <div class="card-body" style="padding:14px 16px;">
+        <div style="font-size:11px;font-weight:800;color:var(--gold);font-family:var(--mono);margin-bottom:10px;">${s.n}</div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px;"><span style="color:var(--text2);">Control Panel</span><span style="color:var(--green);font-weight:700;">${s.cp} Healthy</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px;"><span style="color:var(--text2);">Relay Panel</span><span style="color:var(--green);font-weight:700;">${s.rp} Healthy</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;"><span style="color:var(--text2);">Fault</span><span style="font-weight:700;color:${s.fault==="None"?"var(--green)":"var(--amber)"};">${s.fault}</span></div>
+      </div>
+    </div>`).join("");
+}
+
+// ─── CLOCK ───────────────────────────────────────────────────────────────
+function tick(){
+  const t=new Date();
+  document.getElementById("clk").textContent=t.toLocaleTimeString("en-GB");
+  document.getElementById("clkd").textContent=t.toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short",year:"numeric"});
+}
+setInterval(tick,1000);tick();
+
+// ─── THEME ───────────────────────────────────────────────────────────────
+function toggleTheme(){
+  const isDark = document.documentElement.classList.toggle("dark");
+  const thumb = document.getElementById("toggle-thumb");
+  const track = document.getElementById("toggle-track");
+  const ll = document.getElementById("theme-label-light");
+  const ld = document.getElementById("theme-label-dark");
+  if(isDark){
+    thumb.style.transform = "translateX(20px)";
+  
+    track.style.background = "var(--gold)";
+    ll.style.color = "var(--text3)";
+    ld.style.color = "var(--gold)";
+    ld.style.fontWeight = "800";
+    ll.style.fontWeight = "600";
+  } else {
+    thumb.style.transform = "translateX(0)";
+   
+    track.style.background = "var(--border2)";
+    ll.style.color = "var(--gold)";
+    ll.style.fontWeight = "800";
+    ld.style.color = "var(--text3)";
+    ld.style.fontWeight = "600";
+  }
+  setTimeout(()=>{buildBar();buildDonut();},120);
+}
+
+// ─── NAV ─────────────────────────────────────────────────────────────────
+function showPage(name,el){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("on"));
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("on"));
+  document.getElementById("page-"+name).classList.add("on");
+  el.classList.add("on");
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+buildSiteTable();
+buildSitesFull();
+buildNCRs();
+buildActivity();
+buildWeekly();
+buildIED();
+setTimeout(()=>{buildDonut();buildBar();},200);
+</script>
+</body>
+</html>
+
